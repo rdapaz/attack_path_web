@@ -1,0 +1,41 @@
+# ==========================================================================
+# Attack Path Visualizer — .gitignore
+#
+# CRITICAL: never commit firewall configs or the generated SQLite database.
+# These contain sensitive network topology / policy information.
+# ==========================================================================
+
+# Runtime data (firewall uploads, SQLite DB, settings)
+data/
+/var/lib/attack-path/
+*.sqlite
+*.sqlite3
+*.db
+
+# Firewall config samples — keep OUT of the repo
+*firewall*.txt
+*firewall*.cfg
+*firewall*.conf
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+.env
+.env.local
+
+# Node / Vite
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Editors & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

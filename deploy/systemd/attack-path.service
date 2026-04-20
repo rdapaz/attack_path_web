@@ -1,0 +1,18 @@
+[Unit]
+Description=Attack Path Visualizer API (FastAPI / uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/attack-path/backend
+Environment="PATH=/opt/attack-path/backend/.venv/bin:/usr/bin:/bin"
+Environment="ATTACK_PATH_DATA_DIR=/var/lib/attack-path"
+Environment="ATTACK_PATH_CORS_ORIGINS=*"
+ExecStart=/opt/attack-path/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
