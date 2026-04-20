@@ -149,9 +149,19 @@ Resources:
 
             set -euxo pipefail
             dnf update -y
-            dnf install -y git nginx python3.12 python3.12-pip
+            dnf install -y git nginx python3.12
             curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
             dnf install -y nodejs
+
+            # t2.micro has 1 GB RAM; the React build can peak above that.
+            # Add a 2 GB swap file so `npm run build` doesn't OOM-kill.
+            if ! swapon --show | grep -q '/swapfile'; then
+                fallocate -l 2G /swapfile
+                chmod 600 /swapfile
+                mkswap /swapfile
+                swapon /swapfile
+                echo '/swapfile none swap sw 0 0' >> /etc/fstab
+            fi
 
             install -d -o ec2-user -g ec2-user /opt/attack-path
             sudo -u ec2-user git clone --branch "${RepoBranch}" --depth 1 "${RepoUrl}" /opt/attack-path/src
@@ -165,7 +175,13 @@ Resources:
             sudo -u ec2-user .venv/bin/pip install -e .
 
             cd /opt/attack-path/frontend
-            sudo -u ec2-user npm ci
+            # Use `npm ci` when a lockfile exists (reproducible), else fall back
+            # to `npm install` (which creates the lockfile on first deploy).
+            if [ -f package-lock.json ]; then
+                sudo -u ec2-user npm ci
+            else
+                sudo -u ec2-user npm install
+            fi
             sudo -u ec2-user npm run build
             install -d -o nginx -g nginx /var/www/attack-path
             cp -r dist/. /var/www/attack-path/
@@ -178,8 +194,35 @@ Resources:
             systemctl daemon-reload
             systemctl enable --now attack-path
 
-            # nginx — strip default server block from nginx.conf, drop ours in conf.d/
-            sed -i '/^\s*server\s*{/,/^\s*}/d' /etc/nginx/nginx.conf
+            # nginx — overwrite the main config with a known-good version that
+            # has NO server block (ours lives in /etc/nginx/conf.d/) and drop
+            # our server block into conf.d/.
+            cat > /etc/nginx/nginx.conf <<'NGINXCONF'
+            user nginx;
+            worker_processes auto;
+            error_log /var/log/nginx/error.log notice;
+            pid /run/nginx.pid;
+
+            include /usr/share/nginx/modules/*.conf;
+
+            events {
+                worker_connections 1024;
+            }
+
+            http {
+                log_format  main  '$remote_addr - $remote_user [$time_local] "$request" '
+                                  '$status $body_bytes_sent "$http_referer" '
+                                  '"$http_user_agent" "$http_x_forwarded_for"';
+                access_log  /var/log/nginx/access.log  main;
+                sendfile            on;
+                tcp_nopush          on;
+                keepalive_timeout   65;
+                types_hash_max_size 4096;
+                include             /etc/nginx/mime.types;
+                default_type        application/octet-stream;
+                include /etc/nginx/conf.d/*.conf;
+            }
+            NGINXCONF
             cp /opt/attack-path/deploy/nginx.conf /etc/nginx/conf.d/attack-path.conf
             nginx -t
             systemctl enable --now nginx

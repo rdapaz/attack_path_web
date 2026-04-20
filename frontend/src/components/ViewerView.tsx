@@ -8,7 +8,6 @@ import {
   getCategories,
   getTargets,
   Category,
-  Row,
 } from "../api/client";
 import AnnotationModal from "./AnnotationModal";
 import MermaidPreview from "./MermaidPreview";

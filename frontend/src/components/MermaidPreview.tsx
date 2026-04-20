@@ -33,22 +33,32 @@ export default function MermaidPreview({ rows, target, targetIsZone, viewByZones
 
   useEffect(() => {
     if (!chart || !viewportRef.current) return;
-    if (!window.mermaid) {
-      setError("Mermaid library not loaded yet — refresh and try again.");
-      return;
-    }
-    try {
-      window.mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
-      const id = `m${Date.now()}`;
-      window.mermaid
-        .render(id, chart)
-        .then(({ svg }) => {
-          if (viewportRef.current) viewportRef.current.innerHTML = svg;
-        })
-        .catch((e) => setError((e as Error).message));
-    } catch (e) {
-      setError((e as Error).message);
-    }
+    let cancelled = false;
+
+    (async () => {
+      const start = Date.now();
+      while (!window.mermaid) {
+        if (Date.now() - start > 5000) {
+          setError("Mermaid library failed to load from CDN — check network.");
+          return;
+        }
+        await new Promise((r) => setTimeout(r, 100));
+      }
+      if (cancelled) return;
+
+      try {
+        window.mermaid.initialize({ startOnLoad: false, theme: "default", securityLevel: "loose" });
+        const id = `m${Date.now()}`;
+        const { svg } = await window.mermaid.render(id, chart);
+        if (!cancelled && viewportRef.current) viewportRef.current.innerHTML = svg;
+      } catch (e) {
+        if (!cancelled) setError((e as Error).message);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, [chart]);
 
   async function handleDownloadSvg() {
